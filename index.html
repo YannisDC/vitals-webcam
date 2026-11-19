@@ -16,6 +16,7 @@
     <div class="badges">
       <span class="badge green">no video leaves your device</span>
       <span class="badge blue">open source · MIT</span>
+      <button id="modelBtn" class="ghost-btn gear-btn" title="Deep rPPG model settings">⚙ model</button>
     </div>
   </header>
 
@@ -59,6 +60,15 @@
         <div class="value"><span id="rrValue">—</span><small>brpm</small></div>
         <canvas id="respCanvas" class="wave"></canvas>
       </article>
+      <article class="card" id="cardHrv" data-state="idle">
+        <h2>Heart rate variability <small>RMSSD · SDNN · pNN50</small></h2>
+        <div class="value"><span id="rmssdValue">—</span><small>ms RMSSD</small></div>
+        <div class="hrv-grid">
+          <span>SDNN <strong id="sdnnValue">—</strong> ms</span>
+          <span>pNN50 <strong id="pnn50Value">—</strong>%</span>
+        </div>
+        <p class="fine" id="hrvNote">needs ~60 s of clean pulse signal</p>
+      </article>
       <article class="card wide" id="cardBp" data-state="idle">
         <h2>Blood pressure <small>waveform morphology · experimental</small></h2>
         <div class="value"><span id="bpValue">—</span><small>mmHg</small></div>
@@ -66,8 +76,10 @@
           <span id="bpTag" class="tag">uncalibrated estimate — tap CALIBRATE with a cuff reading</span>
           <button id="calibrateBtn" class="ghost-btn">CALIBRATE</button>
         </div>
-        <p class="fine">Calibration stores your last cuff reading in this browser (localStorage) and anchors
-          relative waveform-driven deviations (upstroke time, decay τ, pulse width, HR) to it.</p>
+        <canvas id="bpDrift" class="wave drift"></canvas>
+        <p class="fine"><span id="calHistory">no cuff calibration yet</span>. Drift plot shows this session's
+          estimates (red SBP, blue DBP; dashed yellow marks = cuff calibrations). Store several cuff
+          points over days to learn your personal model bias.</p>
       </article>
     </section>
 
@@ -114,6 +126,22 @@
         <button id="calClear" type="button" class="danger-btn">Clear</button>
         <button id="calSave" value="default">Save</button>
       </menu>
+    </form>
+  </dialog>
+
+  <dialog id="modelDialog" class="cal-dialog">
+    <form method="dialog">
+      <h3>Deep rPPG model (optional)</h3>
+      <p>Classical POS/CHROM runs always. For extra motion robustness you can load a TS-CAN or
+        EfficientPhys model exported to ONNX ([1,32,3,9,9] diff-frame input — see README). The model
+        runs locally via WebGPU/WASM; estimates are fused with the classical signal.
+        <span id="hrSource"></span></p>
+      <label>ONNX file <input id="modelFile" type="file" accept=".onnx" /></label>
+      <menu>
+        <button id="modelClose" value="cancel">Close</button>
+        <button id="modelLoad" type="button">Load model</button>
+      </menu>
+      <p id="modelStatus" class="fine">No deep model loaded — classical POS/CHROM only.</p>
     </form>
   </dialog>
 

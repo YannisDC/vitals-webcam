@@ -7,6 +7,8 @@ import { bandpass, spectrum, peakOf, detrend, zscore } from '../js/dsp.js';
 import { RppgEstimator, rgbMeans } from '../js/rppg.js';
 import { RespirationEstimator } from '../js/respiration.js';
 import { BloodPressureEstimator, detectPeaks } from '../js/bloodPressure.js';
+import { HRVEstimator, refinedPeakTimes } from '../js/hrv.js';
+import { DeepRppg, fuseHR, standardiseChunk, T as DEEP_T } from '../js/deeprppg.js';
 
 const FS = 30;
 const DUR = 50;
@@ -158,6 +160,82 @@ function synthPulse(hrBpm, t) {
   const m2 = rgbMeans([img]);
   assert.ok(m2 && Math.abs(m2[0] - Math.log(181)) < 1e-6);
   console.log('ok  rgbMeans', m2.map((v) => v.toFixed(2)).join(', '));
+}
+
+/* ---- 9. HRV from a modulated synthetic pulse train ---- */
+{
+  const baseBpm = 70;
+  const est = new HRVEstimator({ fs: FS, updateSec: 999, minBeats: 20 });
+  // IBI modulation: ±3% sinusoidal at 6 s period (~respiratory HF-band trend)
+  let t = 0;
+  const wave = [];
+  let k = 0;
+  while (t < 70) {
+    const ibi = (60 / baseBpm) * (1 + 0.03 * Math.sin(2 * Math.PI * t / 6));
+    const beatStart = t;
+    for (let s = 0; s < Math.floor(ibi * FS); s++) {
+      const localT = s / FS;
+      wave.push({ t: beatStart + localT, v: synthPulse(baseBpm, localT / ibi) });
+      k++;
+    }
+    t += ibi;
+  }
+  for (const p of wave) est.push(p.t, p.v + (Math.random() - 0.5) * 0.03);
+  est._update();
+  assert.ok(est.rmssd != null, 'HRV produced');
+  assert.ok(est.rmssd > 2 && est.rmssd < 250, `RMSSD ${est.rmssd} ms plausible for ±3% IBI swing`);
+  assert.ok(Math.abs(est.meanHr - baseBpm) <= 6, `HRV mean HR ${est.meanHr} ≈ ${baseBpm}`);
+  assert.ok(est.sdnn > 0 && est.sdnn < 300, `SDNN ${est.sdnn} plausible`);
+  console.log('ok  HRV RMSSD', est.rmssd, 'ms · SDNN', est.sdnn, 'ms · pNN50', est.pnn50, '% · beats', est.nBeats, '· HR', est.meanHr);
+
+  const times = refinedPeakTimes(wave.map((p) => p.v), wave.map((p) => p.t), FS);
+  const beatHr = 60 * (times.length - 1) / (times[times.length - 1] - times[0]);
+  const ibiErr = Math.abs(beatHr - baseBpm);
+  assert.ok(ibiErr < 3, `refined beat-count HR within 3 bpm (err ${ibiErr.toFixed(1)})`);
+  console.log('ok  refined peak times', times.length, 'beats');
+}
+
+/* ---- 10. deep-rPPG preprocessing + fusion logic ---- */
+{
+  const chunk = new Float32Array(DEEP_T * 3 * 9 * 9);
+  for (let i = 0; i < chunk.length; i += 3) {
+    chunk[i] = Math.random(); chunk[i + 1] = Math.random() + 5; chunk[i + 2] = Math.random() - 5;
+  }
+  standardiseChunk(chunk);
+  for (let c = 0; c < 3; c++) {
+    let m = 0, n = 0;
+    for (let i = 0; i < chunk.length / 3; i++) { m += chunk[i * 3 + c]; n++; }
+    m /= n;
+    assert.ok(Math.abs(m) < 1e-6, `chunk channel ${c} zero-mean after standardisation (got ${m})`);
+  }
+  assert.equal(fuseHR(null, null).hr, null);
+  assert.equal(fuseHR({ hr: 72, confidence: 0.8 }, null).source, 'classic');
+  const agree = fuseHR({ hr: 72, confidence: 0.6 }, { hr: 71, confidence: 0.5, readyReady: 1 });
+  assert.ok(agree.confidence > 0.6, 'agreement boosts confidence');
+  assert.ok(Math.abs(agree.hr - 71.6) <= 1);
+  const disagree = fuseHR({ hr: 72, confidence: 0.3 }, { hr: 105, confidence: 0.8 });
+  assert.equal(disagree.source, 'deep');
+  const disagree2 = fuseHR({ hr: 72, confidence: 0.9 }, { hr: 105, confidence: 0.2 });
+  assert.equal(disagree2.source, 'classic');
+  console.log('ok  deeprppg standardisation + fusion logic');
+}
+
+/* ---- 11. BP calibration history ---- */
+{
+  const est = new BloodPressureEstimator({ fs: FS });
+  for (let i = 0; i < 30 * FS; i++) est.push(i / FS, synthPulse(70, i / FS), 0.8);
+  assert.ok(est.sbp != null);
+  const estAtCal1 = est.sbp;
+  est.calibrate(122, 79);
+  est.features = { ...est.features, st: est.features.st + 10 };
+  est._estimate();
+  const moving = est.sbp;
+  est.calibrate(128, 82);
+  assert.equal(est.calibration.history.length, 2, 'two-point calibration history');
+  assert.equal(est.sbp, 128, 're-anchored to newest cuff point');
+  assert.ok(Number.isFinite(moving), 'estimate moved with features between calibrations');
+  assert.ok(typeof estAtCal1 === 'number');
+  console.log('ok  BP calibration history (2 points), re-anchoring, feature response', moving, '→');
 }
 
 console.log('\nAll synthetic-pipeline tests passed.');

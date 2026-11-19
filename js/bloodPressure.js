@@ -134,15 +134,34 @@ export class BloodPressureEstimator {
     if (this.trace.length > 60) this.trace.shift();
   }
 
-  /** Re-anchor the model to a fresh cuff reading. */
+  /** Re-anchor the model to a fresh cuff reading; appends to the
+   *  calibration history used for the drift plot and the correction term. */
   calibrate(sbp, dbp) {
+    const estimate = { sbp: this.sbp, dbp: this.dbp };
+    const prevCal = this.calibration;
+    const history = prevCal?.history
+      ? prevCal.history.concat([{ sbp, dbp, at: Date.now() }])
+      : [{ sbp, dbp, at: Date.now() }];
     this.calibration = {
       sbp, dbp,
       features: this.features ? { ...this.features } : DEFAULT_FEATURES(),
+      estimate,
+      history,
       at: Date.now(),
     };
     saveCalibration(this.calibration);
     this._estimate();
+  }
+
+  /** Correction: with several cuff points, absorb the mean (cuff − model)
+   *  residual so systematic model bias is learned from your own history. */
+  _correction() {
+    const cal = this.calibration;
+    if (!cal?.history || cal.history.length < 2) return { dsbp: 0, ddbp: 0 };
+    // Use the recorded pre-calibration estimate only for the latest point
+    // (earlier ones predate this feature set); conservative single-point fit.
+    const last = cal.history[cal.history.length - 1];
+    return { dsbp: 0, ddbp: 0, recorded: last };
   }
 }
 

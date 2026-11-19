@@ -9,6 +9,8 @@ import { createFaceLandmarker, roiBoxes, roiPixels } from './faceTracker.js';
 import { RppgEstimator, rgbMeans } from './rppg.js';
 import { RespirationEstimator } from './respiration.js';
 import { BloodPressureEstimator } from './bloodPressure.js';
+import { HRVEstimator } from './hrv.js';
+import { DeepRppg, fuseHR } from './deeprppg.js';
 
 const RPPG_FS = 30;
 
@@ -21,6 +23,8 @@ const state = {
   rppg: new RppgEstimator({ fs: RPPG_FS, windowSec: 20, updateSec: 0.5 }),
   resp: new RespirationEstimator({ fs: 10, windowSec: 45, updateSec: 1 }),
   bp: new BloodPressureEstimator({ fs: RPPG_FS }),
+  hrv: new HRVEstimator({ fs: RPPG_FS }),
+  deep: null,
   samplesSinceRespPush: 0,
   lastFrameT: null,
   motionRaw: 0,
@@ -31,12 +35,35 @@ const els = {};
 ['startBtn', 'video', 'overlay', 'hrValue', 'rrValue', 'bpValue', 'bpTag', 'qualityBar',
   'qualityText', 'pulseCanvas', 'respCanvas', 'statusText', 'calibrateBtn', 'calDialog',
   'calSbp', 'calDbp', 'calSave', 'calCancel', 'calClear', 'cardHr', 'cardRr', 'cardBp',
-  'stabilize', 'stabilizeBar', 'progressFill', 'calibrateBtnLink'].forEach((id) => (els[id] = document.getElementById(id)));
+  'stabilize', 'stabilizeBar', 'progressFill', 'calibrateBtnLink',
+  'rmssdValue', 'sdnnValue', 'pnn50Value', 'cardHrv', 'hrvNote',
+  'bpDrift', 'calHistory',
+  'modelBtn', 'modelDialog', 'modelFile', 'modelLoad', 'modelStatus', 'modelClose', 'hrSource']
+  .forEach((id) => (els[id] = document.getElementById(id)));
 
 /* ---------------- boot ---------------- */
 
 els.startBtn.addEventListener('click', start);
 els.calibrateBtnLink?.addEventListener('click', (e) => { e.preventDefault(); els.calibrateBtn.click(); });
+els.modelBtn.addEventListener('click', () => {
+  els.modelStatus.textContent = state.deep?.ready
+    ? 'Deep rPPG model loaded and running on-device.'
+    : 'No deep model loaded — classical POS/CHROM only.';
+  els.modelDialog.showModal();
+});
+els.modelLoad.addEventListener('click', async () => {
+  const file = els.modelFile.files?.[0];
+  if (!file) return;
+  els.modelStatus.textContent = 'Loading model…';
+  try {
+    if (!state.deep) state.deep = new DeepRppg({ fs: RPPG_FS });
+    await state.deep.load(file);
+    els.modelStatus.textContent = `Model ready (${RPPG_FS} fps, TS-CAN/EfficientPhys contract).`;
+  } catch (e) {
+    console.error(e);
+    els.modelStatus.textContent = `Load failed: ${e.message}`;
+  }
+});
 els.calibrateBtn.addEventListener('click', () => {
   els.calSbp.value = state.bp.sbp ?? '';
   els.calDbp.value = state.bp.dbp ?? '';
@@ -86,11 +113,11 @@ async function start() {
 const work = document.createElement('canvas');
 const workCtx = work.getContext('2d', { willReadFrequently: true });
 
-function sampleRoi(src, roi, w, h) {
+function sampleRoi(src, roi, w, h, targetW = 0, targetH = 0) {
   const px = roiPixels(roi, w, h);
-  work.width = px.w; work.height = px.h;
-  workCtx.drawImage(src, px.x, px.y, px.w, px.h, 0, 0, px.w, px.h);
-  return workCtx.getImageData(0, 0, px.w, px.h);
+  work.width = targetW || px.w; work.height = targetH || px.h;
+  workCtx.drawImage(src, px.x, px.y, px.w, px.h, 0, 0, work.width, work.height);
+  return workCtx.getImageData(0, 0, work.width, work.height);
 }
 
 function loop() {
@@ -154,7 +181,15 @@ function processFrame() {
 
   state.rppg.push(now, rgb);
   if (state.rppg.wave.length && state.rppg.wave[state.rppg.wave.length - 1] !== undefined && state.rppg.confidence > 0.05) {
-    state.bp.push(now, state.rppg.wave[state.rppg.wave.length - 1], state.rppg.confidence);
+    const lastWave = state.rppg.wave[state.rppg.wave.length - 1];
+    state.bp.push(now, lastWave, state.rppg.confidence);
+    state.hrv.push(now, lastWave);
+  }
+
+  // Optional deep rPPG: 9×9 mean-pooled forehead crop, async inference.
+  if (state.deep?.ready) {
+    const deepPatch = sampleRoi(v, boxes.forehead, w, h, 9, 9);
+    state.deep.push(now, deepPatch.data).catch(() => { });
   }
 
   // Decimate to 10 Hz for the respiration estimators.
@@ -244,8 +279,24 @@ function updateUi() {
   els.qualityText.textContent = conf > 0.6 ? 'Good signal' : conf > 0.3 ? 'Weak — reduce motion / improve light' : 'Poor — hold still';
 
   if (rppg.hr != null) {
-    els.hrValue.textContent = rppg.hr;
+    const fused = fuseHR({ hr: rppg.hr, confidence: rppg.confidence }, state.deep?.ready ? state.deep : null);
+    els.hrValue.textContent = fused.hr;
     els.cardHr.dataset.state = conf > 0.35 ? 'live' : 'weak';
+    if (els.hrSource) {
+      els.hrSource.textContent = fused.source === 'classic' ? 'POS/CHROM'
+        : fused.source === 'deep' ? 'deep model'
+        : 'POS/CHROM + deep model';
+    }
+  }
+
+  if (state.hrv.rmssd != null) {
+    els.rmssdValue.textContent = state.hrv.rmssd;
+    els.sdnnValue.textContent = state.hrv.sdnn;
+    els.pnn50Value.textContent = state.hrv.pnn50;
+    els.cardHrv.dataset.state = state.hrv.quality > 0.5 ? 'live' : 'weak';
+    els.hrvNote.textContent = state.hrv.rejectRate > 0.25
+      ? 'many artifacts — reduce motion'
+      : `${state.hrv.nBeats} beats analyzed · last 60 s`;
   }
   if (resp.rr != null) {
     els.rrValue.textContent = resp.rr;
@@ -253,9 +304,17 @@ function updateUi() {
   }
   if (bp.sbp != null) {
     els.bpValue.textContent = `${bp.sbp}/${bp.dbp}`;
+    const nCal = bp.calibration?.history?.length ?? 0;
     els.bpTag.textContent = bp.uncalibrated
       ? 'uncalibrated estimate — tap CALIBRATE with a cuff reading'
-      : `calibrated · MAP ≈ ${bp.map} mmHg`;
+      : `calibrated (${nCal} cuff point${nCal === 1 ? '' : 's'}) · MAP ≈ ${bp.map} mmHg`;
+    if (els.calHistory) {
+      const hist = bp.calibration?.history ?? [];
+      els.calHistory.textContent = hist.length
+        ? `cuff history: ${hist.map((h) => `${h.sbp}/${h.dbp}`).join(", ")} mmHg`
+        : 'no cuff calibration yet';
+    }
+    drawDrift(els.bpDrift, bp);
   }
 
   // Stabilisation progress: time since start of adequate signal.
@@ -271,6 +330,47 @@ function updateUi() {
   drawWave(els.pulseCanvas, wave, 'rgb(52,211,153)');
   drawWave(els.respCanvas, resp.wave, 'rgb(96,165,250)');
   void lastT; void t0;
+}
+
+/** Session BP drift: estimate trace (min ago) + cuff calibration markers. */
+function drawDrift(canvas, bp) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.clientWidth * devicePixelRatio;
+  const H = canvas.height = canvas.clientHeight * devicePixelRatio;
+  ctx.clearRect(0, 0, W, H);
+  const trace = bp.trace.filter((p) => Date.now() - p.t < 10 * 60_000);
+  const cals = bp.calibration?.history ?? [];
+  const values = trace.flatMap((p) => [p.sbp, p.dbp]).concat(cals.flatMap((c) => [c.sbp, c.dbp]));
+  if (values.length < 2) {
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = `${12 * devicePixelRatio}px system-ui`;
+    ctx.fillText('session BP trace appears here once estimates stabilize', 12, H / 2);
+    return;
+  }
+  const lo = Math.min(...values) - 5, hi = Math.max(...values) + 5;
+  const span = Math.max(1, hi - lo);
+  const tStart = trace.length ? trace[0].t : Date.now();
+  const tEnd = trace.length ? trace[trace.length - 1].t : Date.now();
+  const tSpan = Math.max(30_000, tEnd - tStart);
+  const y = (v) => H - ((v - lo) / span) * (H - 10) - 5;
+  const x = (t) => ((t - tStart) / tSpan) * W;
+  // cuff calibration markers
+  ctx.strokeStyle = 'rgba(251,191,36,0.8)';
+  cals.forEach((c) => {
+    const cx = c.at <= tStart ? 2 : x(Math.max(c.at, tStart));
+    ctx.beginPath(); ctx.setLineDash([3, 4]);
+    ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke(); ctx.setLineDash([]);
+  });
+  for (const [key, color] of [['sbp', 'rgb(248,113,113)'], ['dbp', 'rgb(96,165,250)']]) {
+    ctx.beginPath();
+    trace.forEach((p, i) => (i === 0 ? ctx.moveTo(x(p.t), y(p[key])) : ctx.lineTo(x(p.t), y(p[key]))));
+    ctx.strokeStyle = color; ctx.lineWidth = 1.6 * devicePixelRatio; ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = `${10 * devicePixelRatio}px system-ui`;
+  ctx.fillText('SBP', 6, 14 * devicePixelRatio);
+  ctx.fillText('DBP', 6, 28 * devicePixelRatio);
+  ctx.fillText(`−${Math.round(tSpan / 60_000)} min`, W - 44 * devicePixelRatio, H - 6);
 }
 
 function setStatus(msg) { els.statusText.textContent = msg; }

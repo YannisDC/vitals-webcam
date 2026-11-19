@@ -121,6 +121,15 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 28px 60px; }
 .value small { color: var(--muted); font-size: 15px; }
 
 .wave { width: 100%; height: 90px; margin-top: 14px; border-radius: 10px; }
+.wave.drift { height: 110px; }
+
+.hrv-grid {
+  display: flex; gap: 22px; margin-top: 10px;
+  font-size: 13.5px; color: var(--muted);
+}
+.hrv-grid strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+.gear-btn { margin-left: 4px; }
 
 .bp-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 .tag { font-size: 12.5px; color: var(--muted); }
