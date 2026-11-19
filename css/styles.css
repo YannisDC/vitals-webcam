@@ -1,0 +1,164 @@
+:root {
+  --bg: #0b1220;
+  --panel: #111a2e;
+  --card: #0f1729;
+  --line: #22304d;
+  --text: #e6edf7;
+  --muted: #8aa0bf;
+  --green: #34d399;
+  --blue: #60a5fa;
+  --amber: #fbbf24;
+  --red: #f87171;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(52, 211, 153, 0.08), transparent),
+    var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  justify-content: space-between; align-items: center;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+h1 { margin: 0; font-size: 26px; letter-spacing: 0.5px; }
+h1 span { color: var(--green); }
+
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+.badges { display: flex; gap: 8px; flex-wrap: wrap; }
+.badge {
+  font-size: 12px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.badge.green { color: var(--green); border-color: rgba(52,211,153,0.4); background: rgba(52,211,153,0.08); }
+.badge.blue { color: var(--blue); border-color: rgba(96,165,250,0.4); background: rgba(96,165,250,0.08); }
+
+.disclaimer {
+  margin: 16px 28px 0;
+  padding: 12px 16px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.07);
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.disclaimer a { color: var(--amber); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 20px 28px 60px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.video-panel { padding: 16px; }
+.video-wrap { position: relative; border-radius: 12px; overflow: hidden; background: #000; }
+#video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; transform: scaleX(-1); display: block; }
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
+
+.start-btn {
+  position: absolute; inset: 0; margin: auto;
+  width: fit-content; height: fit-content;
+  padding: 14px 26px; font-size: 17px; font-weight: 600;
+  color: #04140d; background: var(--green); border: none; border-radius: 999px;
+  cursor: pointer; box-shadow: 0 10px 30px rgba(52,211,153,0.35);
+}
+.start-btn:hover { filter: brightness(1.06); }
+.start-btn:disabled { opacity: 0.6; cursor: wait; }
+
+.meta-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  margin-top: 12px; font-size: 14px; color: var(--muted);
+}
+
+.quality { display: flex; align-items: center; gap: 10px; }
+.quality-bar { height: 8px; border-radius: 999px; width: 0; background: var(--red); transition: width 0.4s, background 0.4s; min-width: 8px; }
+#qualityText { font-size: 13px; }
+
+.stabilize { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.progress { flex: 1; height: 6px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
+#progressFill { height: 100%; width: 0; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width 0.5s; }
+
+.vitals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  transition: border-color 0.4s, box-shadow 0.4s;
+}
+.card.wide { grid-column: 1 / -1; }
+.card[data-state="live"] { border-color: rgba(52,211,153,0.5); box-shadow: 0 0 30px rgba(52,211,153,0.06); }
+.card[data-state="weak"] { border-color: rgba(251,191,36,0.4); }
+
+.card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.card h2 small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; color: #5c7396; font-size: 11.5px; margin-top: 2px; }
+
+.value { display: flex; align-items: baseline; gap: 8px; }
+.value span {
+  font-size: 52px; font-weight: 700; font-variant-numeric: tabular-nums;
+  line-height: 1; color: var(--text);
+}
+.card[data-state="weak"] .value span { color: var(--amber); }
+.value small { color: var(--muted); font-size: 15px; }
+
+.wave { width: 100%; height: 90px; margin-top: 14px; border-radius: 10px; }
+
+.bp-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.tag { font-size: 12.5px; color: var(--muted); }
+.fine { font-size: 12px; color: #5c7396; margin: 10px 0 0; line-height: 1.5; }
+
+.ghost-btn {
+  padding: 8px 14px; font-size: 13px; font-weight: 600;
+  background: transparent; color: var(--green);
+  border: 1px solid rgba(52,211,153,0.5); border-radius: 999px; cursor: pointer;
+}
+.ghost-btn:hover { background: rgba(52,211,153,0.1); }
+
+.references { margin-top: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+.references summary { cursor: pointer; color: var(--text); font-weight: 600; }
+.references a { color: var(--blue); }
+
+.cal-dialog {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 16px; padding: 22px 26px;
+  max-width: 420px; width: 92vw;
+}
+.cal-dialog::backdrop { background: rgba(0,0,0,0.6); }
+.cal-dialog h3 { margin: 0 0 8px; }
+.cal-dialog p { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.cal-dialog label { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 12px 0; font-size: 14px; }
+.cal-dialog input {
+  width: 130px; padding: 8px 12px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; font-size: 15px;
+}
+.cal-dialog menu { display: flex; gap: 10px; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
+.cal-dialog menu button { padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+.cal-dialog menu button[value="default"] { background: var(--green); color: #04140d; border-color: transparent; font-weight: 600; }
+.danger-btn { color: var(--red) !important; }
+
+footer { text-align: center; color: #46587a; font-size: 12.5px; padding: 18px; }
+
+@media (max-width: 640px) {
+  .topbar, main { padding-left: 14px; padding-right: 14px; }
+  .disclaimer { margin: 12px 14px 0; }
+  .value span { font-size: 42px; }
+}

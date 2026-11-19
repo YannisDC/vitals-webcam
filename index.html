@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VitalsCam — webcam heart rate, respiration &amp; blood pressure</title>
+  <meta name="description" content="Research open-source app: remote photoplethysmography and respiration from your webcam, fully on-device." />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Vitals<span>Cam</span></h1>
+      <p class="sub">Heart rate · respiratory rate · blood pressure — from your webcam, 100% on-device</p>
+    </div>
+    <div class="badges">
+      <span class="badge green">no video leaves your device</span>
+      <span class="badge blue">open source · MIT</span>
+    </div>
+  </header>
+
+  <div class="disclaimer">
+    <strong>Research &amp; wellness tool — not a medical device.</strong>
+    Heart rate is research-grade (typical MAE ≈ 1–4 bpm seated, good lighting). Respiratory rate is exploratory.
+    Blood pressure is <em>experimental</em> and only meaningful after <a href="#" id="calibrateBtnLink">calibrating with a real cuff</a>;
+    never make treatment decisions from these values. Contraindications and limits: see <a
+      href="https://github.com/ubicomplab/rPPG-Toolbox" target="_blank" rel="noreferrer">the research</a> under “Methods &amp; references”.
+  </div>
+
+  <main>
+    <section class="panel video-panel">
+      <div class="video-wrap">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="scanline" aria-hidden="true"></div>
+        <button id="startBtn" class="start-btn">▶ Start camera</button>
+      </div>
+      <div class="meta-row">
+        <span id="statusText">Camera off.</span>
+        <div class="quality">
+          <div id="qualityBar" class="quality-bar" style="width:0%"></div>
+          <span id="qualityText">—</span>
+        </div>
+      </div>
+      <div class="stabilize" id="stabilizeBar">
+        <div class="progress"><div id="progressFill"></div></div>
+        <span id="stabilize">Stabilising… 0%</span>
+      </div>
+    </section>
+
+    <section class="vitals">
+      <article class="card" id="cardHr" data-state="idle">
+        <h2>Heart rate <small>rPPG · POS/CHROM</small></h2>
+        <div class="value"><span id="hrValue">—</span><small>bpm</small></div>
+        <canvas id="pulseCanvas" class="wave"></canvas>
+      </article>
+      <article class="card" id="cardRr" data-state="idle">
+        <h2>Respiratory rate <small>motion + pulse modulation</small></h2>
+        <div class="value"><span id="rrValue">—</span><small>brpm</small></div>
+        <canvas id="respCanvas" class="wave"></canvas>
+      </article>
+      <article class="card wide" id="cardBp" data-state="idle">
+        <h2>Blood pressure <small>waveform morphology · experimental</small></h2>
+        <div class="value"><span id="bpValue">—</span><small>mmHg</small></div>
+        <div class="bp-row">
+          <span id="bpTag" class="tag">uncalibrated estimate — tap CALIBRATE with a cuff reading</span>
+          <button id="calibrateBtn" class="ghost-btn">CALIBRATE</button>
+        </div>
+        <p class="fine">Calibration stores your last cuff reading in this browser (localStorage) and anchors
+          relative waveform-driven deviations (upstroke time, decay τ, pulse width, HR) to it.</p>
+      </article>
+    </section>
+
+    <details class="references">
+      <summary>Methods &amp; references — the research behind this app</summary>
+      <ul>
+        <li><strong>Pulse rate (rPPG):</strong> de Haan &amp; Jeanne, “Robust Pulse Rate From
+          Chrominance-Based rPPG”, <em>IEEE TBME</em> 60(3), 2013 (CHROM). Wang, den Brinker, Stuijk, de Haan,
+          “Algorithmic Principles of Remote PPG”, <em>IEEE TBME</em> 64(12):1479, 2017 (POS). Liu et al.,
+          “rPPG-Toolbox: Deep Remote PPG Toolbox”, <em>NeurIPS</em> 2023 — benchmark of deep methods (PhysNet,
+          TS-CAN, PhysFormer, RhythmFormer, PhysMamba…).</li>
+        <li><strong>Robustness studies:</strong> “The reliability of rPPG under low illumination and elevated
+          heart rates”, <em>npj Digital Medicine</em>, 2025; Nowara et al., meta-analysis of skin-tone fairness in
+          rPPG, CVPRW 2020; iBVP RGB-thermal dataset with signal-quality labels, <em>Electronics</em> 13, 2024;
+          MMPD multi-domain dataset, 2023.</li>
+        <li><strong>Respiratory rate:</strong> “Remote Respiration Measurement with RGB Cameras: A Review and
+          Benchmark”, <em>ACM Computing Surveys</em>, 2025 (motion signals most robust); “Seconds Matter: Rapid
+          Non-Contact Monitoring of Heart and Respiratory Rate from Face Videos”, <em>Sensors</em> 26(5):1506, 2026
+          (dual-modality: face rPPG + torso motion); “Facial Video-Based Robust Measurement of Respiratory Rates in
+          Various Environmental Conditions”, <em>Journal of Sensors</em>, 2023.</li>
+        <li><strong>Blood pressure:</strong> Takahashi, Ogawa-Ochiai, Tsumura, “Non-contact method of blood
+          pressure estimation using only facial video” (Windkessel pulse-model fit), 2019; Schrumpf et al.,
+          “Assessment of Deep Learning Based Blood Pressure Prediction from PPG and rPPG Signals”, <em>CVPRW</em>
+          2021; van Putten &amp; Bamford, “Improving Systolic Blood Pressure Prediction from Remote
+          Photoplethysmography Using a Stacked Ensemble Regressor”, <em>CVPRW</em> 2023; Mukkamala, Stergiou,
+          Avolio, “Cuffless Blood Pressure Measurement”, <em>Annual Review of Biomedical Engineering</em> 24, 2022
+          (calibration still required); “Estimating Blood Pressure with a Camera: An Exploratory Study of Ambulatory
+          Patients with Cardiovascular Disease”, arXiv:2503.00890, 2025; U-FaceBP, arXiv:2412.10679, 2024.</li>
+        <li><strong>Face tracking:</strong> Kartynnik et al., “Real-time Facial Surface Geometry from Monocular
+          Video on Mobile GPUs”, arXiv:1907.06724 (MediaPipe FaceMesh / Face Landmarker).</li>
+      </ul>
+    </details>
+  </main>
+
+  <dialog id="calDialog" class="cal-dialog">
+    <form method="dialog">
+      <h3>Cuff calibration</h3>
+      <p>Take a reading with a real, validated cuff (upper-arm cuff, seated, 5 min rest), then enter it.
+        Camera BP estimates are anchored to this baseline and track relative deviations.</p>
+      <label>Systolic <input id="calSbp" type="number" min="60" max="230" placeholder="SBP mmHg" required /></label>
+      <label>Diastolic <input id="calDbp" type="number" min="30" max="150" placeholder="DBP mmHg" required /></label>
+      <menu>
+        <button id="calCancel" value="cancel">Cancel</button>
+        <button id="calClear" type="button" class="danger-btn">Clear</button>
+        <button id="calSave" value="default">Save</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <footer>
+    <p>MIT licensed research code. Do not use for diagnosis or treatment of any condition.</p>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

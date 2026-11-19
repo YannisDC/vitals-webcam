@@ -1,0 +1,11 @@
+{
+  "name": "vitalscam",
+  "version": "0.1.0",
+  "description": "Webcam-based heart rate, respiratory rate and exploratory blood pressure (rPPG). Fully client-side.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/pipeline.test.mjs",
+    "start": "python3 -m http.server 8080"
+  }
+}
